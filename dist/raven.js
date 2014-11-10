@@ -1,4 +1,4 @@
-/*! Raven.js 1.1.16 (c322c18) | github.com/getsentry/raven-js */
+/*! Raven.js 1.1.16 (d19555f) | github.com/getsentry/raven-js */
 
 /*
  * Includes TraceKit
@@ -646,7 +646,7 @@ TraceKit.computeStackTrace = (function computeStackTraceWrapper() {
         }
 
         var chrome = /^\s*at (.+?) ?\(?((?:file|https?|chrome-extension):.*?):(\d+)(?::(\d+))?\)?\s*$/i,
-            gecko = /^\s*(\S*)(?:\((.*?)\))?@((?:file|https?|chrome).*?):(\d+)(?::(\d+))?\s*$/i,
+            gecko = /^\s*(.*?)(?:\((.*?)\))?@((?:file|https?|chrome).*?):(\d+)(?::(\d+))?\s*$/i,
             lines = ex.stack.split('\n'),
             stack = [],
             parts,
@@ -1112,7 +1112,8 @@ var _Raven = window.Raven,
     authQueryString,
     isRavenInstalled = false,
 
-    objectPrototype = Object.prototype;
+    objectPrototype = Object.prototype,
+    startTime = now();
 
 /*
  * The core Raven singleton
@@ -1710,6 +1711,10 @@ function truncate(str, max) {
     return str.length <= max ? str : str.substr(0, max) + '\u2026';
 }
 
+function now() {
+    return +new Date();
+}
+
 function getHttpData() {
     var http = {
         url: document.location.href,
@@ -1738,12 +1743,16 @@ function send(data) {
     }, data);
 
     // Merge in the tags and extra separately since objectMerge doesn't handle a deep merge
-    data.tags = objectMerge(globalOptions.tags, data.tags);
-    data.extra = objectMerge(globalOptions.extra, data.extra);
+    data.tags = objectMerge(objectMerge({}, globalOptions.tags), data.tags);
+    data.extra = objectMerge(objectMerge({}, globalOptions.extra), data.extra);
+
+    // Send along our own collected metadata with extra
+    data.extra = objectMerge({
+        'session:duration': now() - startTime,
+    }, data.extra);
 
     // If there are no tags/extra, strip the key from the payload alltogther.
     if (isEmptyObject(data.tags)) delete data.tags;
-    if (isEmptyObject(data.extra)) delete data.extra;
 
     if (globalUser) {
         // sentry.interfaces.User
@@ -1772,6 +1781,7 @@ function makeRequest(data) {
     var img = new Image(),
         src = globalServer + authQueryString + '&sentry_data=' + encodeURIComponent(JSON.stringify(data));
 
+    img.crossOrigin = 'anonymous';
     img.onload = function success() {
         triggerEvent('success', {
             data: data,
